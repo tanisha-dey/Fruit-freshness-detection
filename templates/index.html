@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fruit Basket</title>
+    <link rel="stylesheet" href="static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Fruit Basket</h1>
+
+        <!-- Fruit Add Form -->
+        <div class="form-container">
+            <h2>Add Fruit</h2>
+            <form id="addFruitForm" enctype="multipart/form-data">
+                <label for="name">Fruit Name:</label>
+                <input type="text" id="name" name="name" required>
+
+                <label for="freshness_score">Freshness Score:</label>
+                <input type="number" id="freshness_score" name="freshness_score" min="1" max="10" required>
+
+                <label for="ripeness_stage">Ripeness Stage:</label>
+                <select id="ripeness_stage" name="ripeness_stage" required>
+                    <option value="Unripe">Unripe</option>
+                    <option value="Ripe">Ripe</option>
+                    <option value="Overripe">Overripe</option>
+                </select>
+
+                <label for="spoilage_date">Spoilage Date (in days):</label>
+                <input type="number" id="spoilage_date" name="spoilage_date" min="1" max="365" required>
+
+                <label for="image">Upload Fruit Image:</label>
+                <input type="file" id="image" name="image" accept="image/*" required>
+
+                <button type="submit">Add Fruit</button>
+            </form>
+        </div>
+
+        <!-- View Fruits -->
+        <div class="fruits-container">
+            <h2>All Fruits</h2>
+            <div id="fruits-list" class="fruits-list"></div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        // Function to handle adding fruit
+        $('#addFruitForm').submit(function(e) {
+            e.preventDefault();
+            var formData = new FormData(this);
+            
+            $.ajax({
+                url: '/api/add-fruit',
+                type: 'POST',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function(response) {
+                    alert(response.message);
+                    if (response.success) {
+                        loadFruits(); // Reload the fruits list
+                    }
+                },
+                error: function() {
+                    alert('Error adding fruit!');
+                }
+            });
+        });
+
+        // Function to load all fruits
+        function loadFruits() {
+            $.get('/api/view-fruits', function(data) {
+                if (data.success) {
+                    let fruitsHTML = '';
+                    data.fruits.forEach(fruit => {
+                        fruitsHTML += `
+                            <div class="fruit-card">
+                                
+                                <h3>${fruit.name}</h3>
+                                <p>Freshness: ${fruit.freshness_score}/10</p>
+                                <p>Ripeness: ${fruit.ripeness_stage}</p>
+                                <p>Spoilage: ${fruit.spoilage_date} days</p>
+                            </div>
+                        `;
+                    });
+                    $('#fruits-list').html(fruitsHTML);
+                } else {
+                    alert('Error loading fruits!');
+                }
+            });
+        }
+
+        // Initial load of fruits
+        loadFruits();
+    </script>
+</body>
+</html>

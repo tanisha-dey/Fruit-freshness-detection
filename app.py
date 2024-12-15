@@ -1,74 +1,93 @@
-import streamlit as st
-import requests
+from flask import Flask, request, jsonify, render_template
+from flask_cors import CORS
 from PIL import Image
+import sqlite3
+import os
 
-# Streamlit UI for adding fruit
-st.title("Fruit Basket")
+app = Flask(__name__)
+CORS(app)
 
-# Get fruit details
-name = st.text_input("Fruit Name")
-freshness_score = st.slider("Freshness Score", 1, 10)
-ripeness_stage = st.selectbox("Ripeness Stage", ["Unripe", "Ripe", "Overripe"])
-spoilage_date = st.number_input("Spoilage Date (in days)", min_value=1, max_value=365)
+# Initialize the database
+def init_db():
+    conn = sqlite3.connect('fruits.db')
+    cursor = conn.cursor()
+    cursor.execute('''CREATE TABLE IF NOT EXISTS fruits (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT,
+                        freshness_score INTEGER,
+                        ripeness_stage TEXT,
+                        spoilage_date INTEGER,
+                        image_path TEXT)''')
+    conn.commit()
+    conn.close()
 
-# Upload an image of the fruit
-uploaded_image = st.file_uploader("Upload Fruit Image", type=["jpg", "png", "jpeg"])
+def add_fruit(name, freshness_score, ripeness_stage, spoilage_date, img_path):
+    conn = sqlite3.connect('fruits.db')
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO fruits (name, freshness_score, ripeness_stage, spoilage_date, image_path) VALUES (?, ?, ?, ?, ?)",
+                   (name, freshness_score, ripeness_stage, spoilage_date, img_path))
+    conn.commit()
+    conn.close()
 
-# Add fruit button
-if st.button("Add Fruit"):
-    if uploaded_image is not None and name and freshness_score and ripeness_stage and spoilage_date:
-        # Prepare the data to send to the backend
-        files = {'image': uploaded_image}
-        data = {
-            'name': name,
-            'freshness_score': freshness_score,
-            'ripeness_stage': ripeness_stage,
-            'spoilage_date': spoilage_date
-        }
+# Route to serve the HTML page
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+# Route to add fruit
+@app.route('/api/add-fruit', methods=['POST'])
+def add_new_fruit():
+    try:
+        name = request.form['name']
+        freshness_score = int(request.form['freshness_score'])
+        ripeness_stage = request.form['ripeness_stage']
+        spoilage_date = int(request.form['spoilage_date'])
+        file = request.files['image']
         
-        # Send data to Flask backend
-        response = requests.post("http://127.0.0.1:5000/api/add-fruit", files=files, data=data)
+        # Save the image to the local images folder
+        if not os.path.exists('images'):
+            os.makedirs('images')
+        img = Image.open(file.stream)
+        img_path = f"images/{name}_{freshness_score}.jpg"
+        img.save(img_path)
         
-        # Handle response
-        if response.status_code == 200:
-            result = response.json()
-            if result["success"]:
-                st.success("Fruit added successfully")
-            else:
-                st.error(f"Failed to add fruit: {result['message']}")
-        else:
-            st.error(f"Failed to connect to server: {response.status_code}")
-    else:
-        st.error("Please fill in all fields and upload an image")
+        # Add fruit to database
+        add_fruit(name, freshness_score, ripeness_stage, spoilage_date, img_path)
+        
+        return jsonify({"success": True, "message": "Fruit added successfully"})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)})
 
-# View Fruits button to display the entered fruits
-if st.button("View All Fruits"):
-    # Send GET request to the Flask backend to get the list of fruits
-    response = requests.get("http://127.0.0.1:5000/api/view-fruits")
-    
-    if response.status_code == 200:
-        result = response.json()
-        if result["success"]:
-            fruits = result["fruits"]
-            if fruits:
-                # Display fruits in a grid layout similar to Amazon's product listing
-                cols = st.columns(3)  # 3 columns for listing items like Amazon
-                
-                for i, fruit in enumerate(fruits):
-                    col = cols[i % 3]  # To cycle through columns for each fruit
-                    
-                    with col:
-                        # Display fruit details
-                        st.subheader(fruit['name'])
-                        st.text(f"Freshness: {fruit['freshness_score']}/10")
-                        st.text(f"Ripeness: {fruit['ripeness_stage']}")
-                        st.text(f"Spoilage Date: {fruit['spoilage_date']} days")
-                        
-                        # Display fruit image, resized to a smaller size
-                        st.image(fruit["image_path"], width=150)
-            else:
-                st.info("No fruits found!")
-        else:
-            st.error(f"Failed to load fruits: {result['message']}")
-    else:
-        st.error(f"Failed to connect to server: {response.status_code}")
+# Route to view all fruits
+@app.route('/api/view-fruits', methods=['GET'])
+def view_fruits():
+    try:
+        conn = sqlite3.connect('fruits.db')
+        cursor = conn.cursor()
+        
+        # Get all fruits from the database
+        cursor.execute("SELECT * FROM fruits")
+        fruits = cursor.fetchall()
+        
+        # Create a list of fruits to return as JSON
+        fruit_list = []
+        for fruit in fruits:
+            fruit_list.append({
+                "id": fruit[0],
+                "name": fruit[1],
+                "freshness_score": fruit[2],
+                "ripeness_stage": fruit[3],
+                "spoilage_date": fruit[4],
+                "image_path": fruit[5]
+            })
+        
+        conn.close()
+        return jsonify({"success": True, "fruits": fruit_list})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)})
+
+# Start the Flask app
+if __name__ == '__main__':
+    init_db()
+    app.run(debug=True)
+

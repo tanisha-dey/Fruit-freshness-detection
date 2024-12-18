@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, send_from_directory
 from flask_cors import CORS
 from PIL import Image
 import sqlite3
@@ -21,6 +21,7 @@ def init_db():
     conn.commit()
     conn.close()
 
+# Add a fruit to the database
 def add_fruit(name, freshness_score, ripeness_stage, spoilage_date, img_path):
     conn = sqlite3.connect('fruits.db')
     cursor = conn.cursor()
@@ -34,7 +35,7 @@ def add_fruit(name, freshness_score, ripeness_stage, spoilage_date, img_path):
 def index():
     return render_template('index.html')
 
-# Route to add fruit
+# Route to add a new fruit
 @app.route('/api/add-fruit', methods=['POST'])
 def add_new_fruit():
     try:
@@ -44,14 +45,14 @@ def add_new_fruit():
         spoilage_date = int(request.form['spoilage_date'])
         file = request.files['image']
         
-        # Save the image to the local images folder
+        # Save the image to the local "images" folder
         if not os.path.exists('images'):
             os.makedirs('images')
         img = Image.open(file.stream)
         img_path = f"images/{name}_{freshness_score}.jpg"
         img.save(img_path)
         
-        # Add fruit to database
+        # Add fruit to the database
         add_fruit(name, freshness_score, ripeness_stage, spoilage_date, img_path)
         
         return jsonify({"success": True, "message": "Fruit added successfully"})
@@ -78,7 +79,7 @@ def view_fruits():
                 "freshness_score": fruit[2],
                 "ripeness_stage": fruit[3],
                 "spoilage_date": fruit[4],
-                "image_path": fruit[5]
+                "image_path": f"/images/{os.path.basename(fruit[5])}"
             })
         
         conn.close()
@@ -86,8 +87,15 @@ def view_fruits():
     except Exception as e:
         return jsonify({"success": False, "message": str(e)})
 
+# Route to serve fruit images
+@app.route('/images/<path:filename>')
+def serve_image(filename):
+    try:
+        return send_from_directory('images', filename)
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)})
+
 # Start the Flask app
 if __name__ == '__main__':
-    init_db()
+    init_db()  # Initialize the database when the server starts
     app.run(debug=True)
-
